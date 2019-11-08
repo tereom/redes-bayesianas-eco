@@ -1,6 +1,6 @@
-book_filename: "redes_bayesianas_eco"
+book_filename: "redes-bayesianas-eco"
 chapter_name: "Sección "
-repo: https://github.com/tereom/redes_bayesianas_eco
+repo: https://github.com/tereom/redes-bayesianas-eco
 before_chapter_script: ["setup-rmd.R"]
 clean: [packages.bib, bookdown.bbl]
 new_session: yes

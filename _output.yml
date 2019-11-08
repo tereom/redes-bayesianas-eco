@@ -8,7 +8,7 @@ bookdown::gitbook:
         <li><a href="./">Redes bayesianas e IE</a></li>
       after: |
         <li><a href="https://github.com/rstudio/bookdown" target="blank">Publicado con bookdown</a></li>
-    edit: https://github.com/tereom/redes_bayesianas_eco/edit/master/%s
+    edit: https://github.com/tereom/redes-bayesianas-eco/edit/master/%s
     download: ["pdf", "epub"]
 bookdown::pdf_book:
   includes:
