@@ -1,0 +1,155 @@
+# Fauna
+
+Una de las principales limitantes de la red anterior es que no incluye 
+información de fauna. 
+
+Datos disponibles:
+
+* SNIB: Datos de presencia por especie, georreferenciada.
+
+Propuesta: 
+
+Referencias @basile y @barbet.
+
+
+
+## Insumos
+
+Se debe especificar:
+
+1. La región de análisis: polígonos que determinan que datos se usarán para 
+ajustar el modelo. Por ejemplo uno o más estados, o una ecorregión.
+
+2. Las observaciones de fauna: puntos georreferenciados de especies a 
+considerar. El código actual considera que varias especies pueden estar 
+almacenadas en un mismo archivo shapefile y se ajusta un modelo de manera 
+independiente a cada uno.
+
+3. Las variables que conforman la red bayesiana: rasters de variables que 
+formarán la red bayesiana, con estructura y probabilidades aprendias del 
+subconjunto de datos que coincide con observaciones de cada especie.
+Además de variables explicativas **agregamos un identificador a nivel pixel**.
+
+### 1. Región de análisis
+
+En este ejemplo usaremos los polígonos de Yucatán y Chiapas, la función 
+`read_shps()` lee los archivos shapefile en el vector de rutas, los reproyecta 
+a una proyección dada (por defecto lcc México)
+y regresa un objeto *simple feature* con geometría de polígonos, en este
+caso omitimos las islas o polígonos no principales asociados a los estados.
+
+```{r, warning=FALSE}
+library(bnecology)
+library(sf)
+library(here)
+library(tidyverse)
+# paths
+yuc_chis_paths <- map_chr(c("Yucatan", "Chiapas"), 
+    ~here("data", "edos", ., fs::path_ext_set(., "shp")))
+# read shapes
+yuc_chis <- read_shps(shp_paths = yuc_chis_paths)
+plot(st_geometry(yuc_chis))
+```
+
+### 2. Observaciones fauna
+
+La función `read_shps_points()` lee uno o más shapefiles de puntos, reproyecta 
+a una proyección dada (por defecto lcc México), y regresa un objeto de tipo
+*simple feature* con geometría de puntos. Opcionalmente permite filtrar por el
+valor de una variable. Si se desa filtrar por más de una variable se puede hacer 
+por fuera de la función.
+
+```{r}
+fauna_path <- here("data", "vectors_nodes", "fauna_shapefile_20190814.shp")
+fauna <- read_shps_points(fauna_path, filter_var = fchclct, 
+    filter_values = 2009:2019)
+fauna_gatos <- fauna %>% 
+    filter(espcvld %in% c("Panthera onca", "Puma concolor"))
+glimpse(fauna_gatos)
+```
+
+### 3. Variables red bayesiana
+
+Elegimos un subconjunto de variables disponibles y el raster de ids:
+
+```{r}
+covs_paths_all <- fs::dir_ls(here("data", "rasters_nodes_disc"), glob = "*.tif")
+covs_paths_all %>% 
+    basename()
+```
+
+```{r}
+covs_paths <- covs_paths_all[c(2, 4, 6, 10:15, 17, 18, 19)]
+```
+
+### Ajustar redes
+
+Debe incluirse el raster con identificadores de pixel, cuyo nombre debe incluir
+"id".
+
+```{r, message=FALSE, warning=FALSE}
+fit_yuc_chis <- fit_bn_fauna(fauna_geom = fauna_gatos, species_var = espcvld, 
+    geom = yuc_chis, covs_paths = covs_paths)
+
+library(bnlearn)
+yuc_chis_puma <- fit_yuc_chis[["Puma concolor"]]
+plot(yuc_chis_puma$bn_str)
+```
+
+
+
+## Test in different area
+
+```{r, warning=FALSE, message=FALSE}
+q_roo_path <- here("data", "edos", "Quintana_Roo", "Quintana_Roo.shp")
+q_roo <- read_shps(shp_paths = q_roo_path)
+
+test_q_roo <- test_bn_fauna(fit_yuc_chis, fauna_geom = fauna_gatos, 
+    species_var = espcvld, geom = q_roo, covs_paths = covs_paths) 
+
+test_q_roo
+```
+
+
+```{r}
+test_bn_fauna <- function(bn_fitted_list, fauna_geom, species_var, geom,
+    covs_paths, crs = "lcc_mex") {
+    fauna_covs <- prep_geom_data(fauna_geom, {{species_var}}, geom,
+        covs_paths, crs = crs)
+    fauna_df_list <- fauna_covs[[1]]
+
+    fauna_df <- dplyr::bind_rows(fauna_df_list, .id = "species") %>%
+        tibble::add_column(presence = TRUE)
+    covs_df <- fauna_covs[[2]] %>%
+        dplyr::select(-x, -y) %>%
+        dplyr::distinct()
+    esp_logliks <- purrr::map_dfc(bn_fitted_list, ~logLik(.$fit,
+        covs_df, by.sample = TRUE))
+    all <- esp_logliks %>%
+        dplyr::bind_cols(covs_df) %>%
+        tidyr::pivot_longer(cols = dplyr::one_of(colnames(esp_logliks)),
+            names_to = "species", values_to = "log_lik")
+    all %>%
+        dplyr::left_join(fauna_df) %>%
+        dplyr::mutate(presence = ifelse(is.na(presence), 0, 1)) %>%
+        dplyr::group_by(species, presence) %>%
+        dplyr::summarise(
+            n = dplyr::n(),
+            min = min(log_lik),
+            max = max(log_lik),
+            median = median(log_lik)
+        ) %>%
+        dplyr::arrange(species, presence)
+}
+
+```
+
+
+
+# pendientes
+
+prep_geom_covs: tienen hardwired las capas de clases de zona de vida
+
+analizar variación de covariables y crear buffer alrededor de puntos con fauna
+para casos sintéticos
+agregar mapas
