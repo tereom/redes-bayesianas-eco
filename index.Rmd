@@ -1,16 +1,38 @@
 --- 
 title: "Redes bayesianas en ecología"
 author: "Teresa Ortiz, Julián Equihua"
-date: "`r Sys.Date()`"
 site: bookdown::bookdown_site
-documentclass: bookdown::book
+documentclass: book
 bibliography: [book.bib]
 biblio-style: apalike
 link-citations: yes
+github-repo: tereom/redes-bayesianas-eco
 description: "Introducción a redes bayesianas y su aplicación al ínidice de integridad."
 ---
 
 # Descripción {-}
+
+Redes bayesianas en ecología, construcción del índice de integridad 
+ecosistémica.
+
+Para el análisis desarrollamos el paquete de R `bnecology`, para insatalar 
+correr:
+
+```{r, eval=FALSE}
+if (!require(devtools)) {
+    install.packages("devtools")
+}
+devtools::install_github("tereom/bnecology")
+```
+
+
+#### Ligas {-}
+
+Sitio: https://redes-bayesoanas-eco.netlify.com/pendientes.html
+
+GitHub notas: https://github.com/tereom/redes-bayesianas-eco
+
+GitHub paquete: https://github.com/tereom/bnecology
 
 
 <a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img alt="Licencia Creative Commons" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png" /></a><br />Este trabajo está bajo una <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Licencia Creative Commons Atribución 4.0 Internacional</a>.

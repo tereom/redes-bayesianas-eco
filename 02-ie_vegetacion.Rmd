@@ -192,7 +192,7 @@ ie_levels <- read_csv(here("data", "rasters_nodes_disc", "zz_delt_vp.csv"),
     col_names = FALSE, col_types = "c") %>% 
     pull(X1) 
 
-net_ie <- compute_ie(net = net_ex, ie_node = "zz_delt_vp", geom = edos_sf, 
+net_ie <- compute_ei(net = net_ex, ie_node = "zz_delt_vp", geom = edos_sf, 
     ie_levels = ie_levels, vars_paths = vars_paths)
 
 glimpse(net_ie$ie_df)
@@ -209,13 +209,15 @@ agricultura?
 
 ```{r, warning=FALSE, message=FALSE}
 query_zvh <- function(zvh, node = "proporcion_agricultura", state = "[0.75,1]"){
-    comp_net_ex <- compile(as.grain(net_ex$fit))
     query <- setEvidence(comp_net_ex, nodes = c(node, "zvh_p_hgw"), 
         states = c(state, zvh))
     delta_cond <- querygrain(query, nodes = "zz_delt_vp")
     tibble(zvh = zvh, state = names(delta_cond[[1]]), 
         delta_cond = delta_cond[[1]])
 }
+
+# compilamos red ejemplo
+comp_net_ex <- compile(as.grain(net_ex$fit))
 
 # zvh's ordenadas por tamaño
 zvhs <- querygrain(comp_net_ex, nodes = "zvh_p_hgw")[[1]] %>% 
@@ -241,15 +243,4 @@ deltas_agri %>%
 
 Vemos un comportamiento más suave y diferencias por zona de humedad.
 
-## Fauna
 
-Una de las principales limitantes de la red anterior es que no incluye 
-información de fauna. 
-
-Datos disponibles:
-
-* SNIB: Datos de presencia por especie, georreferenciada.
-
-Propuesta: 
-
-Referencias @basile y @barbet.
