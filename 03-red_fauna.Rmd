@@ -100,6 +100,7 @@ plot(yuc_chis_puma$bn_str)
 
 ### Test in different area
 
+
 ```{r, warning=FALSE, message=FALSE}
 q_roo_path <- here("data", "edos", "Quintana_Roo", "Quintana_Roo.shp")
 q_roo <- read_shps(shp_paths = q_roo_path)
@@ -109,6 +110,7 @@ test_q_roo <- test_bn_fauna(fit_yuc_chis, fauna_geom = fauna_gatos,
 
 test_q_roo
 ```
+
 
 
 
