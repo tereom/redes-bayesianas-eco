@@ -22,7 +22,7 @@ BiocManager::install("Rgraphviz")
 
 Y las referencias son @koller, @ross y @wasserman.
 
-## Intoducción: Modelos gráficos
+## Modelos gráficos
 
 Un modelo gráfico es una red de variables aleatorias donde:
 

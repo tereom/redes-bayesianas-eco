@@ -1,0 +1,255 @@
+# Integridad ecológica
+
+#### ¿Porqué una red para integridad? {-}
+
+## Propuesta vegetación
+
+El primer planteamiento consistió en una red bayesiana con variables de 
+vegetación.
+
+### Variables
+
+La red de integridad tiene una variable de interés particular que es el 
+[grado de hemerobia](https://es.wikipedia.org/wiki/Hemerobia).
+
+* **Grado de hemerobia**: Utiliza la clasificación de imágenes satelitales 
+del año 2004 (INEGI, 2009) con el esperado de vegetación primaria (INEGI, 2003).
+
+Las otras variables que conforman la red de integridad las podemos clasificar
+de acuerdo a su origen:
+
+1. **INFyS**: Variables colectadas *in situ* e interpoladas usando bosques 
+aleatorios.
+    + AlturaTotal_media
+    + AlturaTotal_mediana
+    + AlturaFusteLimpio_media
+    + AlturaFusteLimpio_mediana
+    + DiametroCopa_media
+    + AlturaTotal_desvest
+    + DiametroNormal_media
+    + AlturaFusteLimpio_desvest
+    + AlturaTotal_desvabs
+    + ntree_fixed
+    + AlturaFusteLimpio_desvabs
+    + DiametroCopa_mediana
+    + DiametroNormal_desvest
+    + DiametroNormal_desvabs
+    + DiametroNormal_mediana
+    + DiametroCopa_desvabs
+    + DiametroCopa_desvest
+    
+2. **MODIS**: Productos finales de MODIS.
+
+3. **MAD-Mex**: Clasificación de cobertura de uso de suelos del sistema MAD-Mex.
+
+4. Zonas de vida de Holdridge y mapa digital de elevación de INEGI.
+
+### Red
+
+La estructura de la red se fijó con conocimiento experto, y se llegó a la 
+siguiente propuesta.
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(here)
+library(bnlearn)
+
+netica_bn <- read_rds(here("data", "2019-11-12_vegetation_net.rds"))
+
+netica_bn %>% 
+    bn.net() %>% 
+    bnviewer::viewer(bayesianNetwork.layout = "layout_with_gem")
+```
+
+Propuestas pendientes:
+
+1. Evaluar el score de la red de expertos contra redes con estructura aprendida.
+
+2. Proponer un enfoque híbrido que combine conocimiento experto y datos para
+elucidar una nueva estructura (con *black-list*s y *white-list*s y aprendizaje
+a partir de datos).
+
+### Exploración de la red
+
+Una vez que tenemos fija la estructura de la red debemos estimar y analizar
+las tablas de probabilidad condicional. En el caso de la red anterior se ajustó
+usando el *sfotware* [Netica](https://www.norsys.com) y se exportó para poder
+leerla en R.
+
+Podemos ver las tablas de probabilidad marginal para cada uno de los nodos en 
+la red. Veamos en particular el nodo *delta*.
+
+```{r, message=FALSE, warning=FALSE}
+library(gRain)
+
+comp_netica_bn <- compile(as.grain(netica_bn))
+delta_marg <- querygrain(comp_netica_bn, nodes = "zz_delt_vp_1")
+delta_marg
+```
+
+Ahora, podemos ver como cambia el *query* si tenemos evidencia de proporción de
+asentamientos *s_0* y estamos en zona de vida 17- Tropical moist forest
+
+```{r}
+query_asent <- setEvidence(comp_netica_bn, 
+    nodes = c("proporcion_agricultura", "zvh_31"), 
+    states = c("s_0_39", "s_3"))
+delta_cond <- querygrain(query_asent, nodes = "zz_delt_vp_1")
+delta_cond
+```
+
+¿qué pasa con delta en distintas ZVH y la misma evidencia de 
+agricultura?
+
+```{r, warning=FALSE, message=FALSE}
+query_zvh <- function(zvh, node = "proporcion_agricultura", state = "s_0_39"){
+    query <- setEvidence(comp_netica_bn, 
+        nodes = c(node, "zvh_31"), 
+        states = c(state, zvh))
+    delta_cond <- querygrain(query, nodes = "zz_delt_vp_1")
+    tibble(zvh = zvh, state = parse_number(names(delta_cond[[1]])),  
+        delta_cond = delta_cond[[1]])
+}
+
+# zvh's ordenadas por tamaño
+zvhs <- querygrain(comp_netica_bn, nodes = "zvh_31")[[1]] %>% 
+    sort(decreasing = TRUE) %>% 
+    names()
+
+# distribución marginal, referencia
+delta_marg_df <- tibble(zvh = "s_0", state = extract_numeric(names(delta_marg[[1]])), 
+    delta_cond = delta_marg[[1]])
+
+deltas_agri <- map_df(zvhs[1:5], query_zvh)
+deltas_agri %>% 
+    bind_rows(delta_marg_df) %>% 
+    mutate(zvh = factor(parse_number(zvh))) %>% 
+    ggplot(aes(x = state, y = delta_cond, color = zvh, group = zvh)) +
+    geom_line()
+```
+
+
+
+```{r}
+deltas_bosque <- map_df(zvhs[1:5], ~query_zvh(., node = "proporcion_bosques", 
+    state = "s_0"))
+deltas_bosque %>% 
+    bind_rows(delta_marg_df) %>% 
+    mutate(zvh = factor(parse_number(zvh))) %>% 
+    ggplot(aes(x = state, y = delta_cond, color = zvh, group = zvh)) +
+    geom_line()
+```
+
+Observaciones: 
+
+* Muy ruidoso.  
+* ¿porqué no hay diferencia ente zvh?
+
+
+### Mapas
+
+
+
+### Ejemplo de ajuste en R
+
+1. Creamos una tabla de datos a partir de los rasters de 2004:
+
+```{r, message=FALSE}
+library(tidyverse)
+library(bnecology)
+library(here)
+library(sf)
+
+edos <- c("Yucatan", "Chiapas", "San_Luis_Potosi")
+edo_paths <- map_chr(edos, 
+    ~here("data", "edos", ., fs::path_ext_set(., "shp")))
+# read shapes
+edos_sf <- read_shps(shp_paths = edo_paths)
+plot(st_geometry(edos_sf))
+```
+
+```{r}
+vars_paths_all <- fs::dir_ls(here("data", "rasters_nodes_disc"), glob = "*.tif")
+vars_paths_all %>% 
+    walk(~print(basename(.)))
+```
+
+```{r}
+set.seed(957893)
+vars_paths <- vars_paths_all[c(2, 4, 6, 10:15, 17, 18, 19)]
+net_ex <- fit_bn(edos_sf, vars_paths)
+
+net_ex$bn_str %>% 
+    bnviewer::viewer(bayesianNetwork.layout = "layout_with_sugiyama")
+```
+
+Ahora, ya que tenemos la red ajustada debemos usarla para calcular el índice de
+integridad, este se calcula como el valor esperado para el nodo delta 
+condicional a los valores observados en el resto de los nodos.
+
+```{r}
+ie_levels <- read_csv(here("data", "rasters_nodes_disc", "zz_delt_vp.csv"), 
+    col_names = FALSE, col_types = "c") %>% 
+    pull(X1) 
+
+net_ie <- compute_ie(net = net_ex, ie_node = "zz_delt_vp", geom = edos_sf, 
+    ie_levels = ie_levels, vars_paths = vars_paths)
+
+glimpse(net_ie$ie_df)
+raster::plot(net_ie$raster_ie)
+```
+
+
+
+También podemos repetir el ejercicio de inferencia que hicimos con la red de 
+Nética: 
+
+¿qué pasa con delta en distintas ZVH y la misma evidencia de 
+agricultura?
+
+```{r, warning=FALSE, message=FALSE}
+query_zvh <- function(zvh, node = "proporcion_agricultura", state = "[0.75,1]"){
+    comp_net_ex <- compile(as.grain(net_ex$fit))
+    query <- setEvidence(comp_net_ex, nodes = c(node, "zvh_p_hgw"), 
+        states = c(state, zvh))
+    delta_cond <- querygrain(query, nodes = "zz_delt_vp")
+    tibble(zvh = zvh, state = names(delta_cond[[1]]), 
+        delta_cond = delta_cond[[1]])
+}
+
+# zvh's ordenadas por tamaño
+zvhs <- querygrain(comp_net_ex, nodes = "zvh_p_hgw")[[1]] %>% 
+    sort(decreasing = TRUE) %>% 
+    names()
+
+# distribución marginal, referencia
+delta_marg <- querygrain(comp_net_ex, nodes = "zz_delt_vp")
+delta_marg
+delta_marg_df <- tibble(zvh = "0", state = names(delta_marg[[1]]), 
+    delta_cond = delta_marg[[1]])
+
+deltas_agri <- map_df(zvhs, query_zvh)
+deltas_agri %>% 
+    bind_rows(delta_marg_df) %>% 
+    mutate(
+        zvh = factor(parse_number(zvh)), 
+        delta = factor(state, levels = ie_levels)
+        ) %>% 
+    ggplot(aes(x = delta, y = delta_cond, color = zvh, group = zvh)) +
+        geom_line(alpha = 0.8)
+```
+
+Vemos un comportamiento más suave y diferencias por zona de humedad.
+
+## Fauna
+
+Una de las principales limitantes de la red anterior es que no incluye 
+información de fauna. 
+
+Datos disponibles:
+
+* SNIB: Datos de presencia por especie, georreferenciada.
+
+Propuesta: 
+
+Referencias @basile y @barbet.
