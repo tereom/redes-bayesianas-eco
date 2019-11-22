@@ -1,5 +1,8 @@
 # Integridad ecológica
 
+Esta sección se construyó sobre el trabajo de  Pedro Díaz Maeda, Julián Equihua
+Benitez, Miguel Equihua Zamora, Octavio Pérez-Maqueo.
+
 #### ¿Porqué una red para integridad? {-}
 
 ## Propuesta vegetación
@@ -150,7 +153,9 @@ Observaciones:
 
 
 
-### Ejemplo de ajuste en R
+![Mapa integridad ecosistémica 2004, Miguel Equihua, Octavio Pérez, Pedro Díaz.](img/mapa_ie_2004.png)
+
+## Ejemplo de ajuste en R
 
 1. Creamos una tabla de datos a partir de los rasters de 2004:
 
@@ -183,11 +188,22 @@ net_ex$bn_str %>%
     bnviewer::viewer(bayesianNetwork.layout = "layout_with_sugiyama")
 ```
 
-Ahora, ya que tenemos la red ajustada debemos usarla para calcular el índice de
+Ahora, ya que tenemos la red ajustada podemos usarla para calcular el índice de
 integridad, este se calcula como el valor esperado para el nodo delta 
 condicional a los valores observados en el resto de los nodos.
 
+Notemos que podemos calcular el índice en los estados con datos observados pero
+también en un nuevo estado, en este caso Quintana Roo y Tabasco.
+
 ```{r}
+library(tmap)
+
+edos <- c("Yucatan", "Chiapas", "San_Luis_Potosi", "Quintana_Roo", "Tabasco")
+edo_paths <- map_chr(edos, 
+    ~here("data", "edos", ., fs::path_ext_set(., "shp")))
+# read shapes
+edos_sf <- read_shps(shp_paths = edo_paths)
+
 ie_levels <- read_csv(here("data", "rasters_nodes_disc", "zz_delt_vp.csv"), 
     col_names = FALSE, col_types = "c") %>% 
     pull(X1) 
@@ -196,7 +212,12 @@ net_ie <- compute_ei(net = net_ex, ie_node = "zz_delt_vp", geom = edos_sf,
     ie_levels = ie_levels, vars_paths = vars_paths)
 
 glimpse(net_ie$ie_df)
-raster::plot(net_ie$raster_ie)
+
+tm_shape(net_ie$raster_ie) + 
+    tm_raster("ie_score", style ="cont", palette = "seq", 
+        legend.reverse = TRUE) +
+    tm_layout(aes.palette = list(seq = "-RdYlGn"), 
+        legend.position = c("left","bottom"))
 ```
 
 
