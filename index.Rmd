@@ -28,7 +28,7 @@ devtools::install_github("tereom/bnecology")
 
 #### Ligas {-}
 
-Sitio: https://redes-bayesoanas-eco.netlify.com/pendientes.html
+Sitio: https://redes-bayesianas-eco.netlify.com
 
 GitHub notas: https://github.com/tereom/redes-bayesianas-eco
 
