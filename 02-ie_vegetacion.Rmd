@@ -169,8 +169,8 @@ edos <- c("Yucatan", "Chiapas", "San_Luis_Potosi")
 edo_paths <- map_chr(edos, 
     ~here("data", "edos", ., fs::path_ext_set(., "shp")))
 # read shapes
-edos_sf <- read_shps(shp_paths = edo_paths)
-plot(st_geometry(edos_sf))
+edos_train_sf <- read_shps(shp_paths = edo_paths)
+plot(st_geometry(edos_train_sf))
 ```
 
 ```{r}
@@ -182,7 +182,7 @@ vars_paths_all %>%
 ```{r}
 set.seed(957893)
 vars_paths <- vars_paths_all[c(2, 4, 6, 10:15, 17, 18, 19)]
-net_ex <- fit_bn(edos_sf, vars_paths)
+net_ex <- fit_bn(edos_train_sf, vars_paths)
 
 net_ex$bn_str %>% 
     bnviewer::viewer(bayesianNetwork.layout = "layout_with_sugiyama")
@@ -196,31 +196,33 @@ Notemos que podemos calcular el índice en los estados con datos observados pero
 también en un nuevo estado, en este caso Quintana Roo y Tabasco.
 
 ```{r}
-library(tmap)
-
-edos <- c("Yucatan", "Chiapas", "San_Luis_Potosi", "Quintana_Roo", "Tabasco")
-edo_paths <- map_chr(edos, 
-    ~here("data", "edos", ., fs::path_ext_set(., "shp")))
+edos_test <- c("Quintana_Roo", "Tabasco")
+edo_test_paths <- map_chr(edos_test, ~here("data", "edos", ., 
+    fs::path_ext_set(., "shp")))
 # read shapes
-edos_sf <- read_shps(shp_paths = edo_paths)
+edos_sf <- read_shps(shp_paths = c(edo_paths, edo_test_paths))
 
-ie_levels <- read_csv(here("data", "rasters_nodes_disc", "zz_delt_vp.csv"), 
+ei_levels <- read_csv(here("data", "rasters_nodes_disc", "zz_delt_vp.csv"), 
     col_names = FALSE, col_types = "c") %>% 
     pull(X1) 
 
-net_ie <- compute_ei(net = net_ex, ie_node = "zz_delt_vp", geom = edos_sf, 
-    ie_levels = ie_levels, vars_paths = vars_paths)
+net_ei <- compute_ei(net = net_ex, ei_node = "zz_delt_vp", geom = edos_sf, 
+    ei_levels = ei_levels, vars_paths = vars_paths)
 
-glimpse(net_ie$ie_df)
+glimpse(net_ei$ei_df)
+```
 
-tm_shape(net_ie$raster_ie) + 
-    tm_raster("ie_score", style ="cont", palette = "seq", 
+
+
+La función regresa un raster con el score de integridad de cada pixel.
+
+```{r}
+tm_shape(net_ei$raster_ei) + 
+    tm_raster("ei_score", style = "cont", palette = "seq", 
         legend.reverse = TRUE) +
     tm_layout(aes.palette = list(seq = "-RdYlGn"), 
         legend.position = c("left","bottom"))
 ```
-
-
 
 También podemos repetir el ejercicio de inferencia que hicimos con la red de 
 Nética: 
@@ -256,12 +258,101 @@ deltas_agri %>%
     bind_rows(delta_marg_df) %>% 
     mutate(
         zvh = factor(parse_number(zvh)), 
-        delta = factor(state, levels = ie_levels)
+        delta = factor(state, levels = ei_levels)
         ) %>% 
     ggplot(aes(x = delta, y = delta_cond, color = zvh, group = zvh)) +
         geom_line(alpha = 0.8)
 ```
 
 Vemos un comportamiento más suave y diferencias por zona de humedad.
+
+
+#### Evaluación de la predicción {-}
+
+Podemos separar predicciones de estados que estuvieron en ajuste.
+
+```{r}
+net_ei_train <- compute_ei(net = net_ex, ei_node = "zz_delt_vp", 
+    geom = edos_train_sf, ei_levels = ei_levels, vars_paths = vars_paths)
+
+edos_test_sf <- read_shps(shp_paths = edo_test_paths)
+
+net_ei_test <- compute_ei(net = net_ex, ei_node = "zz_delt_vp", 
+    geom = edos_test_sf, ei_levels = ei_levels, vars_paths = vars_paths)
+```
+
+Matriz de confusión
+
+```{r}
+conf_train <- table(as.character(net_ei_train$ei_df$zz_delt_vp),
+    net_ei_train$ei_df$ei_class_max)
+conf_train
+conf_test <- table(as.character(net_ei_test$ei_df$zz_delt_vp),
+    net_ei_test$ei_df$ei_class_max)
+conf_test
+```
+
+Precisión = TP / (TP + FP) 
+
+```{r}
+round(100 * prop.table(conf_train, margin = 2))
+round(100 * prop.table(conf_test, margin = 2))
+```
+
+Recall = TP / (TP + FN)
+
+```{r}
+round(100 * prop.table(conf_train, margin = 1))
+round(100 * prop.table(conf_test, margin = 1))
+```
+
+
+```{r, fig.height = 3.5}
+library(colorspace)
+
+ei_test <- net_ei_test$ei_df %>% 
+    add_column(sample = "test")
+ei_train <- net_ei_train$ei_df %>% 
+    add_column(sample = "train")
+
+ei_sample_plot <- ei_test %>% 
+    bind_rows(ei_train) %>% 
+    drop_na() %>% 
+    group_by(sample) %>% 
+    sample_n(size = 2000)
+
+ggplot(ei_sample_plot, aes(x = zz_delt_vp, y = ei_score, 
+    color = sample)) +
+    theme_minimal() +
+    geom_boxplot(outlier.colour = NA,  color = "gray") +
+    geom_jitter(alpha = 0.5, height = 0)  +
+    ylim(0, 10) + 
+    facet_wrap(~sample)
+```
+
+
+
+En la siguiente figura graficamos para cada pixel, en el eje $x$ la clase 
+asignada como más probable, en el eje $y$ el ínide de integridad y el color 
+indica la varianza en la distribución del nodo *delta_vp* condicional a la 
+evidencia en el resto de los nodos.
+
+Notamos que hay casos en los que la clase más probable es muy diferente al 
+*score* de integridad asignado. 
+
+```{r}
+library(colorspace)
+ei_sample <- net_ei$ei_df %>% 
+    group_by(ei_class_max) %>% 
+    sample_n(size = 500)
+
+ggplot(ei_sample, aes(x = ei_class_max, y = ei_score, 
+    color = ei_score_var)) +
+  scale_color_continuous_sequential() +
+    theme_minimal() +
+    geom_jitter(alpha = 0.6)
+```
+
+
 
 
