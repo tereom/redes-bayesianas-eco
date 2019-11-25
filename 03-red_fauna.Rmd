@@ -9,9 +9,31 @@ Datos disponibles:
 
 Propuesta: 
 
-Referencias @basile y @barbet.
+Referencias @basile, @barbet y @qiao.
 
+## Consideraciones teóricas
 
+Para incluir registros (sólo-presencia) de fauna en el proceso de modelado de IE con Redes Bayesianas primero se debe acudir a la teoría de modelado de distribución potencial de especies. Los modelos para este propósito se pueden distinguir de acuerdo a sus requerimientos en los datos de entrada @qiao:
+
+* Sólo-presencias (BIOCLIM, ENFA, CONVEXHULL, MVE, KDE y MA)
+* Presencias y fondo (GARP y Maxent)
+* Presencias y ausencia (GLM, GAM y BRT)
+
+Lo cual, en términos de jerga de aprendizaje de máquina se traduce en:
+
+* Métodos de clasificación de una sola clase
+* Métodos de aprendizaje de casos positivos y sin etiqueta (Positive Unlabeled Learning, PU Learning)
+* Clasificación supervisada
+
+Dado un problema de clasificación binaria, los métodos de una sola clase son aquellos que se entrenan con base en sólo casos positivos (por ejemplo sólo las presencias de una especie de interés). Esto es común en problemas de detección de valores atípicos. Los métodos de aprendizaje de casos positivos y sin etiqueta sirven para los casos en los que existen casos positivos pero también casos que no se sabe si son positivos o negativos. Clasificación supervisada es el caso en el que tanto casos positivos (e.g. presencias de una especie de interés) y casos negativos (e.g. ausencias) existen para llevar a cabo el entrenamiento de un clasificador.
+
+En nuestro caso para cada especie que quisiéramos incluir en el modelo de integridad ecosistémica, estamos en un contexto en el que no conocemos casos de ausencias pero tenemos a la mano una gran cantidad de datos de fondo. Esto es, píxeles de todo el país de los cuales no sabemos la presencia o ausencia de la especie de interés. 
+
+Nuestra propuesta, tomada de @basile, consta de un método de dos etapas. Como ya se mencionó, nuestro conjunto de entrenamiento consta de observaciones de presencias y in etiqueta $D=P \cup S$. En la primera etapa extraemos un conjunto confiable de ausencias de $S$ y luego llevamos a cabo aprendizaje supervisado clásico. Para esto se utilizan las redes bayesianas como modelos generativos. Ya se vió que una red bayesiana permite modelar distribuciones conjuntas complejas, nosotros vamos a estimar la distribución marginal $P(X|Y=1)$, i.e. sobre sólo los casos de presencia de cada especie. Luego esta distribución marginal permite llevar a cabo inferencia de manera tal que se puedan escoger una conjunto de casos en $S$ que sirvan como ausencias. Sea ${\mathcal G}$ la red ajustada sobre únicamente los casos positivos de una especie de interés, i.e. $P(X|Y=1)$, se puede calular la verosimilitud de cada uno de los píxeles en $S$. Se debe escoger un punto de corte para separar los píxeles candidatos para tomarse como casos negativos (pseudo-ausencias) para la especie objetivo. Una propuesta es el mínimo de las verosimilitudes sobre el conjunto $D$. También se puede tomar un percentil, por ejemplo el $P_{0.05}$ si se cree que las presencias tienen ruido, e.g. que hay avistamientos en lugares que no corresponden al nicho de la especie (cerca de carreteras o poblados). En @barbet se muestra que una muestra aleatoria balancead tomada de las observaciones del fondo tiende a servir bien para entrenar un clasificador supervisado para modelar distribución de especies. En nuestra propuesta tomamos también una muestra aleatoria pero de las observaciones de fondo con una versoimilitud baja estimada a partir de ${\mathcal G}$.
+
+Se debe notar que estas pseudo ausencias se pueden encontrar para múltiples especies y una vez encontradas, los nodos correspondientes a tales especies son de naturaleza binaria. Una red que incluye tales nodos y además uno de integridad ecosistémica permitirá simultáneamente estimar y llevar a cabo inferencia sobre IE y sobre la distribución de las especies de interés.
+
+Como primer caso de estudio se introdujo a una Red Bayesiana variables utilizadas en el primer ejercicio de modelado de IE y también nodos alimentados por registros de Puma, Jaguar y avistamientos de fauna doméstica.
 
 ## Insumos
 
@@ -30,7 +52,7 @@ formarán la red bayesiana, con estructura y probabilidades aprendias del
 subconjunto de datos que coincide con observaciones de cada especie.
 Además de variables explicativas **agregamos un identificador a nivel pixel**.
 
-### 1. Región de análisis
+### Región de análisis
 
 En este ejemplo usaremos los polígonos de Yucatán y Chiapas, la función 
 `read_shps()` lee los archivos shapefile en el vector de rutas, los reproyecta 
@@ -51,7 +73,7 @@ yuc_chis <- read_shps(shp_paths = yuc_chis_paths)
 plot(st_geometry(yuc_chis))
 ```
 
-### 2. Observaciones fauna
+### Observaciones fauna
 
 La función `read_shps_points()` lee uno o más shapefiles de puntos, reproyecta 
 a una proyección dada (por defecto lcc México), y regresa un objeto de tipo
@@ -68,7 +90,7 @@ fauna_gatos <- fauna %>%
 glimpse(fauna_gatos)
 ```
 
-### 3. Variables red bayesiana
+### Variables red bayesiana
 
 Elegimos un subconjunto de variables disponibles y el raster de ids:
 
@@ -115,10 +137,12 @@ test_q_roo
 
 
 
-### pendientes
+### Primeros mapas de IE con fauna
 
-prep_geom_covs: tienen hardwired las capas de clases de zona de vida
+Como se mencionó esta red bayesiana permite estimar IE y a la par las distribuciones de las especies contempladas (Puma, Jaguar, Vacas). 
 
-analizar variación de covariables y crear buffer alrededor de puntos con fauna
-para casos sintéticos
-agregar mapas
+A continuación presentamos estos resultados.
+
+![Mapa integridad ecosistémica incluyendo fauna.](img/RB_IE.png)
+
+![Mapa de distribución potencial de Jaguar.](img/RB_P_onca_dist.png)
